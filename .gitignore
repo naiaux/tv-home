@@ -10,3 +10,5 @@ shots/
 launcher/build/
 .DS_Store
 __pycache__/
+tools/platform-tools/
+tools/android-sdk/

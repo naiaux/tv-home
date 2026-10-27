@@ -16,3 +16,10 @@ Photos from Wikimedia Commons Featured Pictures, used under their free licences.
 - `12.jpg` Breathtaking beauty of Dzukou Valley in Manipur-Nagaland border (edit): Original:  Samudra Bikash Hazarika
 
 Deri, CC BY-SA 4.0. https://commons.wikimedia.org/wiki/File%3ABreathtaking_beauty_of_Dzukou_Valley_in_Manipur-Nagaland_border_%28edit%29.jpg
+
+Added for the Chromecast build, from Unsplash under the Unsplash License (https://unsplash.com/license),
+centre-cropped to 1920×1080:
+
+- `13.jpg` Mountain valley: Calin Stan. https://unsplash.com/photos/dHRopH1O8uY
+- `14.jpg` White cliffs over a turquoise beach: Johnny Africa. https://unsplash.com/photos/WG7yn5Wi7ww
+- `15.jpg` Lagoon from above: Rodrigo Castro. https://unsplash.com/photos/9DAalxJGXww

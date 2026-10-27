@@ -12,7 +12,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
@@ -22,11 +21,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -57,7 +55,7 @@ import java.util.Set;
 /**
  * Apple TV style home screen: clock top-left, pills top-right, the focused dock app's name over an
  * ambient glow, a dock of pinned apps, and every other app in a grid that scrolls up on Down.
- * Plain framework views only (no AndroidX), no network, no background work.
+ * Plain framework views only (no AndroidX). The only network use is the weather forecast (see Ambient).
  */
 public class MainActivity extends Activity {
 
@@ -85,15 +83,9 @@ public class MainActivity extends Activity {
     private FrameLayout hero;
     private LinearLayout grid;
     private View glow;
-    private ImageView wallBack, wallFront;
+    private Ambient.WallpaperView wall;
     private View gridShade;
-    private String[] wallpapers = new String[0];
-    private int wallIndex = -1;
-    private long wallChangedAt;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable rotateWallpaper = this::nextWallpaper;
-    static final long WALLPAPER_INTERVAL_MS = 10 * 60 * 1000;
-    private TextView greeting, clock, ampm, date, title, wifiPill, appsLabel;
+    private TextView greeting, clock, ampm, date, weather, title, wifiPill, inputsPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
     private int lastFocusedId = View.NO_ID;
@@ -101,12 +93,10 @@ public class MainActivity extends Activity {
     private int packageSeq;
     private PopupWindow inputsPopup;
 
-    private final BroadcastReceiver tick = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { updateClock(); updateWifi(); }
-    };
-    private final BroadcastReceiver packages = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { buildApps(); }
-    };
+    // Lambdas wrapped in static classes, not anonymous classes: JDK 21 javac gives anonymous classes a
+    // nameless MethodParameters entry that crashes d8 from build-tools 34.
+    private final BroadcastReceiver tick = new Receiver(() -> { updateClock(); updateWifi(); updateWeather(); });
+    private final BroadcastReceiver packages = new Receiver(this::buildApps);
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -143,21 +133,20 @@ public class MainActivity extends Activity {
         registerReceiver(tick, tf);
         updateClock();
         updateWifi();
+        updateWeather();
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
         if (last == null && !dockCards.isEmpty()) last = dockCards.get(0);
         if (last != null) last.requestFocus();
         // Catch installs/removals that happened while another app was in front.
         if (getPackageManager().getChangedPackages(packageSeq) != null) buildApps();
         if (firstShow) { firstShow = false; playEntrance(); }
-        // New photo on return if the current one has been up for the full interval.
-        if (wallIndex < 0 || SystemClock.elapsedRealtime() - wallChangedAt >= WALLPAPER_INTERVAL_MS) nextWallpaper();
-        else scheduleWallpaper(WALLPAPER_INTERVAL_MS - (SystemClock.elapsedRealtime() - wallChangedAt));
+        wall.start();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        handler.removeCallbacks(rotateWallpaper);
+        wall.stop();
         unregisterReceiver(tick);
         if (inputsPopup != null) inputsPopup.dismiss();
     }
@@ -189,11 +178,9 @@ public class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
 
-        // Wallpaper: two stacked layers so a new photo can crossfade in over the old one.
-        wallBack = wallpaperLayer();
-        wallFront = wallpaperLayer();
-        root.addView(wallBack, new FrameLayout.LayoutParams(-1, -1));
-        root.addView(wallFront, new FrameLayout.LayoutParams(-1, -1));
+        // Wallpaper: the same photo the screensaver shows, changing on the same clock.
+        wall = new Ambient.WallpaperView(this);
+        root.addView(wall, new FrameLayout.LayoutParams(-1, -1));
         // Scrim: darker at the top (clock, pills) and bottom (dock) so text stays readable.
         View scrim = new View(this);
         scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -203,9 +190,6 @@ public class MainActivity extends Activity {
         gridShade.setBackgroundColor(0xB3000000);
         gridShade.setAlpha(0f);
         root.addView(gridShade, new FrameLayout.LayoutParams(-1, -1));
-        try {
-            wallpapers = getAssets().list("wallpapers");
-        } catch (java.io.IOException ignored) { }
 
         glow = new View(this);
         root.addView(glow, new FrameLayout.LayoutParams(-1, -1));
@@ -295,19 +279,30 @@ public class MainActivity extends Activity {
         date.setPadding(0, 0, dp(16), 0); // letterSpacing is not counted in the measured width
         date.setLetterSpacing(0.22f);
         left.addView(date);
-        for (TextView t : new TextView[]{greeting, clock, ampm, date}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
+        weather = text(13, "sans-serif-light", 0xE6FFFFFF);
+        weather.setSingleLine(true);
+        weather.setVisibility(View.GONE);
+        left.addView(weather, llp(-2, -2, 0, dp(10), 0, 0));
+        for (TextView t : new TextView[]{greeting, clock, ampm, date, weather}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
         header.addView(left, new FrameLayout.LayoutParams(dp(420), -2, Gravity.START | Gravity.TOP));
 
         LinearLayout right = new LinearLayout(this);
         right.setGravity(Gravity.CENTER_VERTICAL);
         right.setClipChildren(false);
-        TextView inputs = pill("Inputs", "⇥");
-        inputs.setOnClickListener(v -> showInputs(v));
+        List<TextView> row = new ArrayList<>();
+        // Streaming sticks (Chromecast etc.) have no HDMI inputs or tuner, so the pill can be turned off.
+        if (getResources().getBoolean(R.bool.show_inputs)) {
+            inputsPill = pill("Inputs", "⇥");
+            inputsPill.setOnClickListener(v -> showInputs(v));
+            row.add(inputsPill);
+        }
         wifiPill = pill("Wi-Fi", "◉");
         wifiPill.setOnClickListener(v -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
         TextView settings = pill("Settings", "⚙");
         settings.setOnClickListener(v -> launch(new Intent(Settings.ACTION_SETTINGS)));
-        for (TextView p : new TextView[]{inputs, wifiPill, settings}) {
+        row.add(wifiPill);
+        row.add(settings);
+        for (TextView p : row) {
             right.addView(p, llp(-2, dp(30), dp(10), 0, 0, 0));
             pills.add(p);
         }
@@ -370,6 +365,8 @@ public class MainActivity extends Activity {
         dockCards.clear();
         gridCards.clear();
 
+        // Size tiles for at least a grid row's worth of slots, so a short dock stays centred instead of stretching.
+        dockRow.setWeightSum(Math.max(dock.size(), cols));
         for (int i = 0; i < dock.size(); i++) {
             View tile = tile(dock.get(i), true);
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -418,11 +415,7 @@ public class MainActivity extends Activity {
         card.setClickable(true);
         card.setTag(app);
         card.setClipToOutline(true);
-        card.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View v, Outline o) {
-                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(10));
-            }
-        });
+        card.setOutlineProvider(new RoundOutline(dp(10)));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(app.isBanner ? 0xFF1C1C1E : darken(app.color, 0.45f));
         card.setBackground(bg);
@@ -621,14 +614,27 @@ public class MainActivity extends Activity {
         date.setText(new SimpleDateFormat("EEEE  d MMMM", Locale.getDefault()).format(now.getTime()).toUpperCase(Locale.getDefault()));
     }
 
+    /** Show the cached forecast, and fetch a new one when it's more than half an hour old. */
+    private void updateWeather() {
+        Ambient.Weather w = Ambient.cachedWeather(this);
+        weather.setVisibility(w == null ? View.GONE : View.VISIBLE);
+        if (w != null) weather.setText(w.line());
+        Ambient.refreshWeather(this, this::updateWeather);
+    }
+
     private void updateWifi() {
         String name = "Wi-Fi";
         try {
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (wm != null && wm.getConnectionInfo() != null) {
-                String s = wm.getConnectionInfo().getSSID();
+            // Online/offline from ConnectivityManager: WifiManager hides the network (id -1) when location is off.
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            NetworkCapabilities nc = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if (nc == null) name = "Offline";
+            else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) name = "Ethernet";
+            else {
+                // The network name is only visible with location services on; otherwise the pill just says Wi-Fi.
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                String s = wm == null || wm.getConnectionInfo() == null ? null : wm.getConnectionInfo().getSSID();
                 if (s != null && !s.contains("unknown ssid")) name = s.replace("\"", "");
-                if (wm.getConnectionInfo().getNetworkId() == -1) name = "Offline";
             }
         } catch (SecurityException ignored) { }
         wifiPill.setText("◉  " + name);
@@ -658,60 +664,6 @@ public class MainActivity extends Activity {
         glow.animate().alpha(alpha).setDuration(300).start();
         // The grid sits over the photo's busiest middle part, so dim it while browsing apps.
         gridShade.animate().alpha(alpha < 1f ? 1f : 0f).setDuration(300).start();
-    }
-
-    // ---------------------------------------------------------------- wallpaper
-
-    private ImageView wallpaperLayer() {
-        ImageView v = new ImageView(this);
-        v.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        return v;
-    }
-
-    /** Decode the next photo off the main thread, then crossfade it in over the current one. */
-    private void nextWallpaper() {
-        handler.removeCallbacks(rotateWallpaper);
-        if (wallpapers.length == 0) return;
-        if (wallIndex < 0) wallIndex = getPreferences(MODE_PRIVATE).getInt("wallpaper", -1);
-        wallIndex = (wallIndex + 1) % wallpapers.length;
-        getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", wallIndex).apply();
-        wallChangedAt = SystemClock.elapsedRealtime();
-        String name = "wallpapers/" + wallpapers[wallIndex];
-        new Thread(() -> {
-            Bitmap bm = null;
-            try (java.io.InputStream in = getAssets().open(name)) {
-                BitmapFactory.Options o = new BitmapFactory.Options();
-                o.inPreferredConfig = Bitmap.Config.RGB_565;
-                bm = BitmapFactory.decodeStream(in, null, o);
-            } catch (java.io.IOException ignored) { }
-            Bitmap result = bm;
-            runOnUiThread(() -> showWallpaper(result));
-        }).start();
-        scheduleWallpaper(WALLPAPER_INTERVAL_MS);
-    }
-
-    private void showWallpaper(Bitmap bm) {
-        if (bm == null || isDestroyed()) return;
-        // Swap roles: the old front becomes the back, the new photo fades in on top.
-        ImageView old = wallFront;
-        wallFront = wallBack;
-        wallBack = old;
-        ViewGroup root = (ViewGroup) wallFront.getParent();
-        root.removeView(wallFront);
-        root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
-        wallFront.setImageBitmap(bm);
-        wallFront.setAlpha(0f);
-        wallFront.animate().alpha(1f).setDuration(firstWallpaper ? 600 : 2000).withEndAction(() -> {
-            wallBack.setImageDrawable(null); // release the previous photo
-        }).start();
-        firstWallpaper = false;
-    }
-
-    private boolean firstWallpaper = true;
-
-    private void scheduleWallpaper(long delay) {
-        handler.removeCallbacks(rotateWallpaper);
-        handler.postDelayed(rotateWallpaper, Math.max(1000, delay));
     }
 
     /** Average the banner's vivid pixels, then push saturation so the glow reads as a colour. */
@@ -826,11 +778,24 @@ public class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         // Menu key on the remote opens the Inputs dropdown.
-        if (e.getKeyCode() == KeyEvent.KEYCODE_MENU && e.getAction() == KeyEvent.ACTION_UP && !pills.isEmpty()) {
-            showInputs(pills.get(0));
+        if (e.getKeyCode() == KeyEvent.KEYCODE_MENU && e.getAction() == KeyEvent.ACTION_UP && inputsPill != null) {
+            showInputs(inputsPill);
             return true;
         }
         return super.dispatchKeyEvent(e);
+    }
+
+    static final class Receiver extends BroadcastReceiver {
+        private final Runnable onReceive;
+        Receiver(Runnable onReceive) { this.onReceive = onReceive; }
+        @Override public void onReceive(Context c, Intent i) { onReceive.run(); }
+    }
+
+    /** Rounded-rect clip for app tiles. */
+    static final class RoundOutline extends ViewOutlineProvider {
+        private final int radius;
+        RoundOutline(int radius) { this.radius = radius; }
+        @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), radius); }
     }
 
     /** 16:9 container. */

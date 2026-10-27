@@ -44,12 +44,29 @@ launcher/build-and-install.sh                               # build + install th
 
 Undo everything with `tools/restore.sh <the same list>`.
 
+## Windows, and Google TV with Wireless debugging (Chromecast)
+
+Newer Google TV builds (Chromecast with Google TV on Android 14) have no ADB on port 5555, only
+**Wireless debugging** with a pairing code, which `adb-shell` can't do. Use Google's `adb` instead
+(unzip platform-tools into `tools/platform-tools/`), and run the scripts from Git Bash:
+
+```bash
+tools/platform-tools/adb.exe pair <tv-ip>:<pairing port> <code>   # from the TV's pairing screen
+tools/platform-tools/adb.exe mdns services                               # shows the connect port
+export ADB="$PWD/tools/platform-tools/adb.exe -s <tv-ip>:<connect port>"
+JAVA_HOME=/c/path/to/jdk ANDROID_HOME="$PWD/tools/android-sdk" launcher/build-and-install.sh
+tools/restore-from-backup.sh            # undo: back to the state saved in backup/LATEST
+```
+
+The SDK needs only `build-tools;34.0.0` and `platforms;android-34`. Turn off **Verify apps over USB**
+in Developer options or the install fails with `INSTALL_FAILED_VERIFICATION_FAILURE`.
+
 ## What's here
 
 | Path | What it is |
 |---|---|
 | [PROMPT.md](PROMPT.md) | The prompt for Claude Code / any coding agent |
-| [launcher/](launcher/) | The home screen. 4.7 MB including the wallpapers; plain Android, no network, no background services |
+| [launcher/](launcher/) | The home screen and screensaver. ~6 MB including the wallpapers; plain Android, no background services; network only for the weather |
 | [launcher/res/values/config.xml](launcher/res/values/config.xml) | Dock apps, hidden apps, Live TV app, grid columns |
 | [tools/tv.py](tools/tv.py) | Pure-Python ADB client: shell, batch, screenshots, chunked APK push |
 | [tools/find-tv.sh](tools/find-tv.sh) | Finds Android TVs on your Wi-Fi |
@@ -59,12 +76,19 @@ Undo everything with `tools/restore.sh <the same list>`.
 
 ## The launcher
 
-- Clock, greeting and date top-left. Frosted pills top-right for **Inputs** (HDMI/AV/Live TV
+- Clock, greeting and date top-left, with today's weather under them (now, high / low, an icon for the
+  forecast; [Open-Meteo](https://open-meteo.com), no key, location set in `config.xml`). Frosted pills top-right for **Inputs** (HDMI/AV/Live TV
   dropdown; the remote's Menu key opens it too), **Wi-Fi** (shows the network name) and **Settings**.
 - A dock of your favourite apps. The focused app's name appears above it over a glow coloured from
   its banner. Press Down for every other app in a grid.
-- 12 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
-  `launcher/assets/wallpapers/` (1920×1080 JPEGs, credits in `launcher/WALLPAPER-CREDITS.md`).
+- 15 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
+  `launcher/assets/wallpapers/` and list them in `launcher/wallpapers.txt` (1920×1080 JPEGs, credits
+  in `launcher/WALLPAPER-CREDITS.md`).
+- A matching **screensaver**: the same photo as the home screen (both pick it from the clock, so they
+  change together), with a large clock, the date and the weather.
+- **Remote app buttons** (optional): Google TV sends the remote's YouTube/Netflix buttons to its own
+  launcher, so they go dead once it's disabled. The launcher's small accessibility service opens the
+  apps set in `remote_buttons` instead. Turn it on in Settings → Accessibility → TV Home remote buttons.
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.
 
 Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
@@ -83,6 +107,17 @@ Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
   scripts run one per shell call.
 - **Apps installed from the Play Store didn't appear**, because the package broadcast was missed
   while another app was in front. The launcher re-checks with `getChangedPackages` on every return.
+- **Wi-Fi pill said "Offline"** with location services off: Android hides the Wi-Fi network from
+  apps then. Online status now comes from ConnectivityManager; the network name shows only with location on.
+- **d8 (build-tools 34) crashes on JDK 21 anonymous classes** (nameless `MethodParameters` entry). The
+  launcher uses small named classes instead, so JDK 17 and 21 both work.
+- **aapt2 on Windows** stored assets as `assets/wallpapers\01.jpg`, which Android can't find. Assets
+  are added with `jar` instead; only files listed in `launcher/wallpapers.txt` are packaged.
+- **The remote's YouTube button went dead**: Google TV's global-key table sends it (`KEYCODE_BUTTON_3`)
+  only to the stock launcher. Netflix (`BUTTON_4`) goes to the Chromecast service. See *Remote app buttons*.
+- **Button Mapper ignores keys injected over ADB**, and its free version allows one custom button.
+- **Shell can't start a screensaver** (`cmd dreams` needs root). To test, set `screen_off_timeout` to
+  15000 for a moment, then put it back.
 - **Unsplash blocks scripted downloads** with a bot check. The wallpapers come from Wikimedia
   Commons Featured Pictures instead.
 
@@ -90,7 +125,7 @@ Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
 
 Android TV and Google TV: TCL, Xiaomi/Redmi, Hisense, Sony, OnePlus, Realme, Nvidia Shield,
 Chromecast with Google TV and most others. Not Samsung (Tizen), LG (webOS) or Fire TV.
-Tested on: TCL Google TV (Android 11). Add yours to `examples/`.
+Tested on: TCL Google TV (Android 11), Chromecast with Google TV HD (Android 14). Add yours to `examples/`.
 
 ## Credits
 
