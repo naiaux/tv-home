@@ -51,9 +51,9 @@ Newer Google TV builds (Chromecast with Google TV on Android 14) have no ADB on 
 (unzip platform-tools into `tools/platform-tools/`), and run the scripts from Git Bash:
 
 ```bash
-tools/platform-tools/adb.exe pair 192.168.1.145:<pairing port> <code>   # from the TV's pairing screen
+tools/platform-tools/adb.exe pair <tv-ip>:<pairing port> <code>   # from the TV's pairing screen
 tools/platform-tools/adb.exe mdns services                               # shows the connect port
-export ADB="$PWD/tools/platform-tools/adb.exe -s 192.168.1.145:<connect port>"
+export ADB="$PWD/tools/platform-tools/adb.exe -s <tv-ip>:<connect port>"
 JAVA_HOME=/c/path/to/jdk ANDROID_HOME="$PWD/tools/android-sdk" launcher/build-and-install.sh
 tools/restore-from-backup.sh            # undo: back to the state saved in backup/LATEST
 ```

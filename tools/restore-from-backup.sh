@@ -4,8 +4,8 @@
 # screensaver and accessibility services, make the original home app the default again, and remove the
 # tvhome launcher. (Button Mapper's own button list lives inside that app and isn't touched.)
 #
-#   ADB="tools/platform-tools/adb.exe -s 192.168.1.145:42045" tools/restore-from-backup.sh
-#   ... tools/restore-from-backup.sh backup/20261027-174908      a specific backup (default: backup/LATEST)
+#   ADB="tools/platform-tools/adb.exe -s <tv-ip>:<connect port>" tools/restore-from-backup.sh
+#   ... tools/restore-from-backup.sh backup/<timestamp>          a specific backup (default: backup/LATEST)
 #   ... tools/restore-from-backup.sh --keep-launcher             re-enable everything but keep tvhome installed
 #
 # Wireless debugging changes port when it's toggled; `adb mdns services` shows the current one.

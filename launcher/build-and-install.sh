@@ -4,7 +4,7 @@
 #   launcher/build-and-install.sh --build    build only
 # Works on macOS and on Windows (Git Bash). Set JAVA_HOME / ANDROID_HOME if they aren't in the default places.
 # Install goes through tools/tv.py (adb-shell), or through a real adb when ADB is set, e.g. for wireless
-# debugging on Android 11+:  ADB="tools/platform-tools/adb.exe -s 192.168.1.145:42045" launcher/build-and-install.sh
+# debugging on Android 11+:  ADB="tools/platform-tools/adb.exe -s <tv-ip>:<connect port>" launcher/build-and-install.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
