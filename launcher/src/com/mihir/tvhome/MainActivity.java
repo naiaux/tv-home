@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
     private View glow;
     private Ambient.WallpaperView wall;
     private View gridShade;
-    private TextView greeting, clock, ampm, date, weather, title, wifiPill, inputsPill, appsLabel;
+    private TextView greeting, clock, ampm, date, weather, rooms, title, wifiPill, inputsPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
     private int lastFocusedId = View.NO_ID;
@@ -283,7 +283,11 @@ public class MainActivity extends Activity {
         weather.setSingleLine(true);
         weather.setVisibility(View.GONE);
         left.addView(weather, llp(-2, -2, 0, dp(10), 0, 0));
-        for (TextView t : new TextView[]{greeting, clock, ampm, date, weather}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
+        rooms = text(13, "sans-serif-light", 0xE6FFFFFF);
+        rooms.setSingleLine(true);
+        rooms.setVisibility(View.GONE);
+        left.addView(rooms, llp(-2, -2, 0, dp(4), 0, 0));
+        for (TextView t : new TextView[]{greeting, clock, ampm, date, weather, rooms}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
         header.addView(left, new FrameLayout.LayoutParams(dp(420), -2, Gravity.START | Gravity.TOP));
 
         LinearLayout right = new LinearLayout(this);
@@ -614,12 +618,16 @@ public class MainActivity extends Activity {
         date.setText(new SimpleDateFormat("EEEE  d MMMM", Locale.getDefault()).format(now.getTime()).toUpperCase(Locale.getDefault()));
     }
 
-    /** Show the cached forecast, and fetch a new one when it's more than half an hour old. */
+    /** Show the cached forecast and room temperatures, fetching new ones when they're stale. */
     private void updateWeather() {
         Ambient.Weather w = Ambient.cachedWeather(this);
         weather.setVisibility(w == null ? View.GONE : View.VISIBLE);
         if (w != null) weather.setText(w.line());
         Ambient.refreshWeather(this, this::updateWeather);
+        String r = Ambient.cachedRooms(this);
+        rooms.setVisibility(r == null ? View.GONE : View.VISIBLE);
+        if (r != null) rooms.setText(r);
+        Ambient.refreshRooms(this, this::updateWeather);
     }
 
     private void updateWifi() {

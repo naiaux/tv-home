@@ -84,6 +84,10 @@ in Developer options or the install fails with `INSTALL_FAILED_VERIFICATION_FAIL
 - 15 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
   `launcher/assets/wallpapers/` and list them in `launcher/wallpapers.txt` (1920×1080 JPEGs, credits
   in `launcher/WALLPAPER-CREDITS.md`).
+- **Home Assistant room temperatures** (optional) under the weather, e.g. `🏠 Living 21.5°  Bedroom 22.0°`.
+  Set `ha_url` and `ha_sensors` in `config.xml`, and put a long-lived access token (HA profile → Security)
+  in `launcher/ha-token.txt`. That file is git-ignored and baked into the APK at build time. Plain http is
+  only allowed to the host in `res/xml/network_security_config.xml` (`homeassistant.local` by default).
 - A matching **screensaver**: the same photo as the home screen (both pick it from the clock, so they
   change together), with a large clock, the date and the weather.
 - **Remote app buttons** (optional): Google TV sends the remote's YouTube/Netflix buttons to its own

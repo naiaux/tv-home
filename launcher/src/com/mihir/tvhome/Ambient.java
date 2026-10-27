@@ -132,6 +132,59 @@ final class Ambient {
         }
     }
 
+    // ---------------------------------------------------------------- Home Assistant
+
+    static final long ROOMS_MAX_AGE_MS = 2 * 60 * 1000;
+
+    /** "🏠  Living 21.5°   Bedroom 22.0°", or null when Home Assistant isn't set up or hasn't answered yet. */
+    static String cachedRooms(Context c) {
+        if (c.getString(R.string.ha_token).isEmpty()) return null;
+        return c.getSharedPreferences("rooms", Context.MODE_PRIVATE).getString("line", null);
+    }
+
+    /** Read every ha_sensors entity if the cache is older than ROOMS_MAX_AGE_MS, then run onUpdated. */
+    static void refreshRooms(Context c, Runnable onUpdated) {
+        String base = c.getString(R.string.ha_url), token = c.getString(R.string.ha_token);
+        SharedPreferences p = c.getSharedPreferences("rooms", Context.MODE_PRIVATE);
+        if (token.isEmpty() || System.currentTimeMillis() - p.getLong("fetchedAt", 0) < ROOMS_MAX_AGE_MS) return;
+        p.edit().putLong("fetchedAt", System.currentTimeMillis()).apply(); // one fetch at a time, even if it fails
+        String[] sensors = c.getResources().getStringArray(R.array.ha_sensors);
+        new Thread(() -> {
+            StringBuilder line = new StringBuilder("🏠 ");
+            for (String s : sensors) {
+                String[] kv = s.split("=", 2);
+                if (kv.length < 2) continue;
+                try {
+                    JSONObject state = new JSONObject(get(base + "/api/states/" + kv[1].trim(), token));
+                    double v = Double.parseDouble(state.getString("state"));
+                    line.append("  ").append(kv[0].trim()).append(' ')
+                            .append(String.format(java.util.Locale.ROOT, "%.1f°", v)).append(' ');
+                } catch (Exception e) {
+                    // Unavailable sensor ("unavailable" state, offline, renamed): leave that room out.
+                    android.util.Log.w("tvhome", "home assistant " + kv[1] + ": " + e);
+                }
+            }
+            String text = line.toString().trim();
+            p.edit().putString("line", text.equals("🏠") ? null : text).apply();
+            new Handler(Looper.getMainLooper()).post(onUpdated);
+        }).start();
+    }
+
+    private static String get(String url, String bearer) throws java.io.IOException {
+        HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
+        con.setConnectTimeout(5_000);
+        con.setReadTimeout(5_000);
+        if (bearer != null) con.setRequestProperty("Authorization", "Bearer " + bearer);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (InputStream in = con.getInputStream()) {
+            byte[] buf = new byte[4096];
+            for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+        } finally {
+            con.disconnect();
+        }
+        return out.toString("UTF-8");
+    }
+
     private static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("weather", Context.MODE_PRIVATE);
     }
@@ -158,20 +211,9 @@ final class Ambient {
         Context app = c.getApplicationContext();
         new Thread(() -> {
             try {
-                URL url = new URL("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon
-                        + "&current=temperature_2m,weather_code,is_day"
-                        + "&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto");
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
-                con.setConnectTimeout(10_000);
-                con.setReadTimeout(10_000);
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                try (InputStream in = con.getInputStream()) {
-                    byte[] buf = new byte[4096];
-                    for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
-                } finally {
-                    con.disconnect();
-                }
-                JSONObject j = new JSONObject(out.toString("UTF-8"));
+                JSONObject j = new JSONObject(get("https://api.open-meteo.com/v1/forecast?latitude=" + lat
+                        + "&longitude=" + lon + "&current=temperature_2m,weather_code,is_day"
+                        + "&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto", null));
                 JSONObject cur = j.getJSONObject("current"), daily = j.getJSONObject("daily");
                 prefs(app).edit()
                         .putInt("temp", (int) Math.round(cur.getDouble("temperature_2m")))

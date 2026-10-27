@@ -19,11 +19,11 @@ import java.util.Locale;
 
 /**
  * Screensaver: the home screen's wallpaper (same photo, same 10-minute rotation) with a large clock, the
- * date and the weather in the bottom-left corner. Any key wakes the TV back to whatever was on screen.
+ * date, the weather and the Home Assistant room temperatures in the bottom-left corner. Any key wakes the TV back to whatever was on screen.
  */
 public class Screensaver extends DreamService {
     private Ambient.WallpaperView wall;
-    private TextView clock, date, weather;
+    private TextView clock, date, weather, rooms;
     private final BroadcastReceiver tick = new MainActivity.Receiver(this::update);
 
     @Override
@@ -56,6 +56,10 @@ public class Screensaver extends DreamService {
         LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(-2, -2);
         wp.topMargin = dp(10);
         info.addView(weather, wp);
+        rooms = text(16, "sans-serif-light", 0xE6FFFFFF);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
+        rp.topMargin = dp(4);
+        info.addView(rooms, rp);
         // Full width: a wrap_content block is measured before the text is set and would clip "6:40" to "6:4".
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1, -2, Gravity.START | Gravity.BOTTOM);
         ip.setMargins(dp(56), 0, 0, dp(48));
@@ -90,6 +94,10 @@ public class Screensaver extends DreamService {
         weather.setVisibility(w == null ? View.GONE : View.VISIBLE);
         if (w != null) weather.setText(w.line());
         Ambient.refreshWeather(this, this::update);
+        String r = Ambient.cachedRooms(this);
+        rooms.setVisibility(r == null ? View.GONE : View.VISIBLE);
+        if (r != null) rooms.setText(r);
+        Ambient.refreshRooms(this, this::update);
     }
 
     private TextView text(int sp, String family, int color) {

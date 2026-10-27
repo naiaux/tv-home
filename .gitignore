@@ -12,3 +12,5 @@ launcher/build/
 __pycache__/
 tools/platform-tools/
 tools/android-sdk/
+# Home Assistant long-lived token, read by the launcher build. Never commit.
+launcher/ha-token.txt
