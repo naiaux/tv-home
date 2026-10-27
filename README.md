@@ -44,6 +44,23 @@ launcher/build-and-install.sh                               # build + install th
 
 Undo everything with `tools/restore.sh <the same list>`.
 
+## Windows, and Google TV with Wireless debugging (Chromecast)
+
+Newer Google TV builds (Chromecast with Google TV on Android 14) have no ADB on port 5555, only
+**Wireless debugging** with a pairing code, which `adb-shell` can't do. Use Google's `adb` instead
+(unzip platform-tools into `tools/platform-tools/`), and run the scripts from Git Bash:
+
+```bash
+tools/platform-tools/adb.exe pair <tv-ip>:<pairing port> <code>   # from the TV's pairing screen
+tools/platform-tools/adb.exe mdns services                               # shows the connect port
+export ADB="$PWD/tools/platform-tools/adb.exe -s <tv-ip>:<connect port>"
+JAVA_HOME=/c/path/to/jdk ANDROID_HOME="$PWD/tools/android-sdk" launcher/build-and-install.sh
+tools/restore-from-backup.sh            # undo: back to the state saved in backup/LATEST
+```
+
+The SDK needs only `build-tools;34.0.0` and `platforms;android-34`. Turn off **Verify apps over USB**
+in Developer options or the install fails with `INSTALL_FAILED_VERIFICATION_FAILURE`.
+
 ## What's here
 
 | Path | What it is |
@@ -83,6 +100,12 @@ Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
   scripts run one per shell call.
 - **Apps installed from the Play Store didn't appear**, because the package broadcast was missed
   while another app was in front. The launcher re-checks with `getChangedPackages` on every return.
+- **Wi-Fi pill said "Offline"** with location services off: Android hides the Wi-Fi network from
+  apps then. Online status now comes from ConnectivityManager; the network name shows only with location on.
+- **d8 (build-tools 34) crashes on JDK 21 anonymous classes** (nameless `MethodParameters` entry). The
+  launcher uses small named classes instead, so JDK 17 and 21 both work.
+- **aapt2 on Windows** stored assets as `assets/wallpapers\01.jpg`, which Android can't find. Assets
+  are added with `jar` instead; only files listed in `launcher/wallpapers.txt` are packaged.
 - **Unsplash blocks scripted downloads** with a bot check. The wallpapers come from Wikimedia
   Commons Featured Pictures instead.
 
@@ -90,7 +113,7 @@ Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
 
 Android TV and Google TV: TCL, Xiaomi/Redmi, Hisense, Sony, OnePlus, Realme, Nvidia Shield,
 Chromecast with Google TV and most others. Not Samsung (Tizen), LG (webOS) or Fire TV.
-Tested on: TCL Google TV (Android 11). Add yours to `examples/`.
+Tested on: TCL Google TV (Android 11), Chromecast with Google TV HD (Android 14). Add yours to `examples/`.
 
 ## Credits
 

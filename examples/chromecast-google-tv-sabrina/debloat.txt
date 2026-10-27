@@ -1,0 +1,23 @@
+# Chromecast with Google TV (device sabrina), Android 14, build UTTC.250917.004
+# Apply: tools/disable.sh examples/chromecast-google-tv-sabrina/debloat.txt   Undo: tools/restore.sh <same file>
+# Everything is DISABLED for user 0, never uninstalled.
+# Answers here: no casting, keep Google Assistant and Ambient mode (dreamx, katniss not listed).
+
+# Ads and promoted content
+android.autoinstalls.config.google.sabrina   # silently installs promoted apps
+# com.google.android.tvrecommendations       (already disabled by the system on this build)
+# com.google.android.videos                  (already disabled by the system on this build)
+
+# Telemetry and ad-tech
+com.google.android.tv.remotecontrol.logging  # remote usage logging
+com.google.android.feedback                  # feedback / crash report uploader
+com.google.android.adservices.api            # Privacy Sandbox ad services
+com.google.android.ondevicepersonalization.services
+com.google.android.federatedcompute
+
+# Features this household doesn't use
+com.google.android.apps.mediashell           # Chromecast built-in (casting from a phone)
+# com.google.android.apps.education.cast2class (already disabled by the system)
+com.google.android.play.games
+# com.google.android.devicelockcontroller   (protected: Android refuses to disable it)
+com.android.printspooler                     # printing

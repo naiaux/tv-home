@@ -22,6 +22,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -93,7 +95,7 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable rotateWallpaper = this::nextWallpaper;
     static final long WALLPAPER_INTERVAL_MS = 10 * 60 * 1000;
-    private TextView greeting, clock, ampm, date, title, wifiPill, appsLabel;
+    private TextView greeting, clock, ampm, date, title, wifiPill, inputsPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
     private int lastFocusedId = View.NO_ID;
@@ -101,12 +103,10 @@ public class MainActivity extends Activity {
     private int packageSeq;
     private PopupWindow inputsPopup;
 
-    private final BroadcastReceiver tick = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { updateClock(); updateWifi(); }
-    };
-    private final BroadcastReceiver packages = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { buildApps(); }
-    };
+    // Lambdas wrapped in static classes, not anonymous classes: JDK 21 javac gives anonymous classes a
+    // nameless MethodParameters entry that crashes d8 from build-tools 34.
+    private final BroadcastReceiver tick = new Receiver(() -> { updateClock(); updateWifi(); });
+    private final BroadcastReceiver packages = new Receiver(this::buildApps);
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -301,13 +301,20 @@ public class MainActivity extends Activity {
         LinearLayout right = new LinearLayout(this);
         right.setGravity(Gravity.CENTER_VERTICAL);
         right.setClipChildren(false);
-        TextView inputs = pill("Inputs", "⇥");
-        inputs.setOnClickListener(v -> showInputs(v));
+        List<TextView> row = new ArrayList<>();
+        // Streaming sticks (Chromecast etc.) have no HDMI inputs or tuner, so the pill can be turned off.
+        if (getResources().getBoolean(R.bool.show_inputs)) {
+            inputsPill = pill("Inputs", "⇥");
+            inputsPill.setOnClickListener(v -> showInputs(v));
+            row.add(inputsPill);
+        }
         wifiPill = pill("Wi-Fi", "◉");
         wifiPill.setOnClickListener(v -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
         TextView settings = pill("Settings", "⚙");
         settings.setOnClickListener(v -> launch(new Intent(Settings.ACTION_SETTINGS)));
-        for (TextView p : new TextView[]{inputs, wifiPill, settings}) {
+        row.add(wifiPill);
+        row.add(settings);
+        for (TextView p : row) {
             right.addView(p, llp(-2, dp(30), dp(10), 0, 0, 0));
             pills.add(p);
         }
@@ -370,6 +377,8 @@ public class MainActivity extends Activity {
         dockCards.clear();
         gridCards.clear();
 
+        // Size tiles for at least a grid row's worth of slots, so a short dock stays centred instead of stretching.
+        dockRow.setWeightSum(Math.max(dock.size(), cols));
         for (int i = 0; i < dock.size(); i++) {
             View tile = tile(dock.get(i), true);
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -418,11 +427,7 @@ public class MainActivity extends Activity {
         card.setClickable(true);
         card.setTag(app);
         card.setClipToOutline(true);
-        card.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View v, Outline o) {
-                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(10));
-            }
-        });
+        card.setOutlineProvider(new RoundOutline(dp(10)));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(app.isBanner ? 0xFF1C1C1E : darken(app.color, 0.45f));
         card.setBackground(bg);
@@ -624,11 +629,16 @@ public class MainActivity extends Activity {
     private void updateWifi() {
         String name = "Wi-Fi";
         try {
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (wm != null && wm.getConnectionInfo() != null) {
-                String s = wm.getConnectionInfo().getSSID();
+            // Online/offline from ConnectivityManager: WifiManager hides the network (id -1) when location is off.
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            NetworkCapabilities nc = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if (nc == null) name = "Offline";
+            else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) name = "Ethernet";
+            else {
+                // The network name is only visible with location services on; otherwise the pill just says Wi-Fi.
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                String s = wm == null || wm.getConnectionInfo() == null ? null : wm.getConnectionInfo().getSSID();
                 if (s != null && !s.contains("unknown ssid")) name = s.replace("\"", "");
-                if (wm.getConnectionInfo().getNetworkId() == -1) name = "Offline";
             }
         } catch (SecurityException ignored) { }
         wifiPill.setText("◉  " + name);
@@ -679,9 +689,17 @@ public class MainActivity extends Activity {
         String name = "wallpapers/" + wallpapers[wallIndex];
         new Thread(() -> {
             Bitmap bm = null;
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            // Downsample photos larger than 1080p; a full-size camera JPEG can need 50+ MB on a 2 GB TV.
+            o.inJustDecodeBounds = true;
             try (java.io.InputStream in = getAssets().open(name)) {
-                BitmapFactory.Options o = new BitmapFactory.Options();
-                o.inPreferredConfig = Bitmap.Config.RGB_565;
+                BitmapFactory.decodeStream(in, null, o);
+            } catch (java.io.IOException ignored) { }
+            o.inJustDecodeBounds = false;
+            o.inSampleSize = 1;
+            while (o.outWidth / (o.inSampleSize * 2) >= 1920 && o.outHeight / (o.inSampleSize * 2) >= 1080) o.inSampleSize *= 2;
+            o.inPreferredConfig = Bitmap.Config.RGB_565;
+            try (java.io.InputStream in = getAssets().open(name)) {
                 bm = BitmapFactory.decodeStream(in, null, o);
             } catch (java.io.IOException ignored) { }
             Bitmap result = bm;
@@ -826,11 +844,24 @@ public class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         // Menu key on the remote opens the Inputs dropdown.
-        if (e.getKeyCode() == KeyEvent.KEYCODE_MENU && e.getAction() == KeyEvent.ACTION_UP && !pills.isEmpty()) {
-            showInputs(pills.get(0));
+        if (e.getKeyCode() == KeyEvent.KEYCODE_MENU && e.getAction() == KeyEvent.ACTION_UP && inputsPill != null) {
+            showInputs(inputsPill);
             return true;
         }
         return super.dispatchKeyEvent(e);
+    }
+
+    static final class Receiver extends BroadcastReceiver {
+        private final Runnable onReceive;
+        Receiver(Runnable onReceive) { this.onReceive = onReceive; }
+        @Override public void onReceive(Context c, Intent i) { onReceive.run(); }
+    }
+
+    /** Rounded-rect clip for app tiles. */
+    static final class RoundOutline extends ViewOutlineProvider {
+        private final int radius;
+        RoundOutline(int radius) { this.radius = radius; }
+        @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), radius); }
     }
 
     /** 16:9 container. */
