@@ -57,6 +57,8 @@ public class Screensaver extends DreamService {
         wp.topMargin = dp(10);
         info.addView(weather, wp);
         rooms = text(16, "sans-serif-light", 0xE6FFFFFF);
+        rooms.setSingleLine(false); // one room per line
+        rooms.setLineSpacing(dp(4), 1f);
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
         rp.topMargin = dp(4);
         info.addView(rooms, rp);

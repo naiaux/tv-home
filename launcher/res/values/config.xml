@@ -19,15 +19,16 @@
         <item>BUTTON_4=com.plexapp.android</item>
     </string-array>
 
-    <!-- Home Assistant room temperatures, shown under the weather. Label=entity, in display order.
+    <!-- Home Assistant room temperatures, one per line under the weather. Label=entity, in display order;
+         the label can start with an emoji.
          The token comes from launcher/ha-token.txt (git-ignored) at build time; without it the row is off.
          Plain http is allowed only to the host named in res/xml/network_security_config.xml. -->
     <string name="ha_url" translatable="false">http://homeassistant.local:8123</string>
     <string name="ha_token" translatable="false"></string>
     <string-array name="ha_sensors">
-        <item>Living=sensor.t_h_sensor_temperature</item>
-        <item>Bedroom=sensor.bedroom_sensors_temperature</item>
-        <item>Studio=sensor.wifi_t_h_temperature</item>
+        <item>🛋️ Living=sensor.t_h_sensor_temperature</item>
+        <item>🛏️ Bedroom=sensor.bedroom_sensors_temperature</item>
+        <item>🖼️ Studio=sensor.wifi_t_h_temperature</item>
     </string-array>
 
     <!-- Weather under the clock (Open-Meteo, no key). Empty latitude to turn it off. Bucharest. -->

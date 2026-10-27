@@ -136,36 +136,37 @@ final class Ambient {
 
     static final long ROOMS_MAX_AGE_MS = 2 * 60 * 1000;
 
-    /** "🏠  Living 21.5°   Bedroom 22.0°", or null when Home Assistant isn't set up or hasn't answered yet. */
+    /** One room per line ("🛋️  Living  21.5°"), or null when Home Assistant isn't set up or hasn't answered yet. */
     static String cachedRooms(Context c) {
         if (c.getString(R.string.ha_token).isEmpty()) return null;
-        return c.getSharedPreferences("rooms", Context.MODE_PRIVATE).getString("line", null);
+        return c.getSharedPreferences("rooms", Context.MODE_PRIVATE).getString("lines", null);
     }
 
     /** Read every ha_sensors entity if the cache is older than ROOMS_MAX_AGE_MS, then run onUpdated. */
     static void refreshRooms(Context c, Runnable onUpdated) {
         String base = c.getString(R.string.ha_url), token = c.getString(R.string.ha_token);
         SharedPreferences p = c.getSharedPreferences("rooms", Context.MODE_PRIVATE);
-        if (token.isEmpty() || System.currentTimeMillis() - p.getLong("fetchedAt", 0) < ROOMS_MAX_AGE_MS) return;
+        boolean fresh = p.contains("lines") && System.currentTimeMillis() - p.getLong("fetchedAt", 0) < ROOMS_MAX_AGE_MS;
+        if (token.isEmpty() || fresh) return;
         p.edit().putLong("fetchedAt", System.currentTimeMillis()).apply(); // one fetch at a time, even if it fails
         String[] sensors = c.getResources().getStringArray(R.array.ha_sensors);
         new Thread(() -> {
-            StringBuilder line = new StringBuilder("🏠 ");
+            StringBuilder lines = new StringBuilder();
             for (String s : sensors) {
                 String[] kv = s.split("=", 2);
                 if (kv.length < 2) continue;
                 try {
                     JSONObject state = new JSONObject(get(base + "/api/states/" + kv[1].trim(), token));
                     double v = Double.parseDouble(state.getString("state"));
-                    line.append("  ").append(kv[0].trim()).append(' ')
-                            .append(String.format(java.util.Locale.ROOT, "%.1f°", v)).append(' ');
+                    if (lines.length() > 0) lines.append('\n');
+                    lines.append(kv[0].trim().replaceFirst(" ", "  ")).append("  ")
+                            .append(String.format(java.util.Locale.ROOT, "%.1f°", v));
                 } catch (Exception e) {
                     // Unavailable sensor ("unavailable" state, offline, renamed): leave that room out.
                     android.util.Log.w("tvhome", "home assistant " + kv[1] + ": " + e);
                 }
             }
-            String text = line.toString().trim();
-            p.edit().putString("line", text.equals("🏠") ? null : text).apply();
+            p.edit().putString("lines", lines.length() == 0 ? null : lines.toString()).apply();
             new Handler(Looper.getMainLooper()).post(onUpdated);
         }).start();
     }

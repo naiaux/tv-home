@@ -284,7 +284,7 @@ public class MainActivity extends Activity {
         weather.setVisibility(View.GONE);
         left.addView(weather, llp(-2, -2, 0, dp(10), 0, 0));
         rooms = text(13, "sans-serif-light", 0xE6FFFFFF);
-        rooms.setSingleLine(true);
+        rooms.setLineSpacing(dp(4), 1f);
         rooms.setVisibility(View.GONE);
         left.addView(rooms, llp(-2, -2, 0, dp(4), 0, 0));
         for (TextView t : new TextView[]{greeting, clock, ampm, date, weather, rooms}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
