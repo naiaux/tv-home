@@ -6,9 +6,22 @@
 <resources>
     <!-- Dock apps, left to right. Apps that aren't installed are skipped. -->
     <string-array name="dock_apps">
-        <item>com.google.android.youtube.tv</item>
         <item>com.plexapp.android</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>tv.twitch.android.app</item>
+        <item>com.comedybox.app</item>
     </string-array>
+
+    <!-- Remote app buttons, KEY=package. Needs Settings → Accessibility → TV Home remote buttons on.
+         Chromecast with Google TV remote: YouTube = BUTTON_3, Netflix = BUTTON_4. Empty to leave them alone. -->
+    <string-array name="remote_buttons">
+        <item>BUTTON_3=com.google.android.youtube.tv</item>
+        <item>BUTTON_4=com.plexapp.android</item>
+    </string-array>
+
+    <!-- Weather under the clock (Open-Meteo, no key). Empty latitude to turn it off. Bucharest. -->
+    <string name="weather_latitude" translatable="false">44.4268</string>
+    <string name="weather_longitude" translatable="false">26.1025</string>
 
     <!-- Never shown as tiles: system helpers, and the Live TV app (it's in the Inputs menu). -->
     <string-array name="hidden_apps">

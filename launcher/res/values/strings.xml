@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="remote_keys_label">TV Home remote buttons</string>
+    <string name="remote_keys_description">Opens your chosen apps from the remote\'s YouTube and Netflix buttons. It only listens for those buttons; every other key is passed on untouched.</string>
+    <string name="screensaver_label">TV Home</string>
+</resources>

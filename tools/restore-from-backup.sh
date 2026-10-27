@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Put the TV back the way it was when the backup was taken: re-enable every package that was enabled then
-# and is disabled now (this includes the stock launcher and Google TV's setup app), make the original home
-# app the default again, and remove the tvhome launcher.
+# and is disabled now (this includes the stock launcher and Google TV's setup app), restore the original
+# screensaver and accessibility services, make the original home app the default again, and remove the
+# tvhome launcher. (Button Mapper's own button list lives inside that app and isn't touched.)
 #
 #   ADB="tools/platform-tools/adb.exe -s <tv-ip>:<connect port>" tools/restore-from-backup.sh
 #   ... tools/restore-from-backup.sh backup/<timestamp>          a specific backup (default: backup/LATEST)
@@ -30,6 +31,14 @@ for p in $(tr -d '\r' < "$DIR/packages-enabled.txt" | sed 's/^package://'); do
     printf 're-enable %-52s ' "$p"
     $ADB shell pm enable "$p" | tr -d '\r'  # one pm call per shell; chained ones can stop early
   fi
+done
+
+# Settings the launcher changes: the screensaver, and the accessibility service for the remote's app buttons.
+for key in screensaver_components enabled_accessibility_services; do
+  old=$(tr -d '\r' < "$DIR/settings-secure.txt" | sed -n "s/^$key=//p")
+  echo "$key -> ${old:-(unset)}"
+  if [ -n "$old" ] && [ "$old" != null ]; then $ADB shell settings put secure "$key" "'$old'"
+  else $ADB shell settings delete secure "$key" >/dev/null; fi
 done
 
 home=$(tr -d '\r' < "$DIR/home-activity.txt")

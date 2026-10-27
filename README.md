@@ -66,7 +66,7 @@ in Developer options or the install fails with `INSTALL_FAILED_VERIFICATION_FAIL
 | Path | What it is |
 |---|---|
 | [PROMPT.md](PROMPT.md) | The prompt for Claude Code / any coding agent |
-| [launcher/](launcher/) | The home screen. 4.7 MB including the wallpapers; plain Android, no network, no background services |
+| [launcher/](launcher/) | The home screen and screensaver. ~6 MB including the wallpapers; plain Android, no background services; network only for the weather |
 | [launcher/res/values/config.xml](launcher/res/values/config.xml) | Dock apps, hidden apps, Live TV app, grid columns |
 | [tools/tv.py](tools/tv.py) | Pure-Python ADB client: shell, batch, screenshots, chunked APK push |
 | [tools/find-tv.sh](tools/find-tv.sh) | Finds Android TVs on your Wi-Fi |
@@ -76,12 +76,19 @@ in Developer options or the install fails with `INSTALL_FAILED_VERIFICATION_FAIL
 
 ## The launcher
 
-- Clock, greeting and date top-left. Frosted pills top-right for **Inputs** (HDMI/AV/Live TV
+- Clock, greeting and date top-left, with today's weather under them (now, high / low, an icon for the
+  forecast; [Open-Meteo](https://open-meteo.com), no key, location set in `config.xml`). Frosted pills top-right for **Inputs** (HDMI/AV/Live TV
   dropdown; the remote's Menu key opens it too), **Wi-Fi** (shows the network name) and **Settings**.
 - A dock of your favourite apps. The focused app's name appears above it over a glow coloured from
   its banner. Press Down for every other app in a grid.
-- 12 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
-  `launcher/assets/wallpapers/` (1920×1080 JPEGs, credits in `launcher/WALLPAPER-CREDITS.md`).
+- 15 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
+  `launcher/assets/wallpapers/` and list them in `launcher/wallpapers.txt` (1920×1080 JPEGs, credits
+  in `launcher/WALLPAPER-CREDITS.md`).
+- A matching **screensaver**: the same photo as the home screen (both pick it from the clock, so they
+  change together), with a large clock, the date and the weather.
+- **Remote app buttons** (optional): Google TV sends the remote's YouTube/Netflix buttons to its own
+  launcher, so they go dead once it's disabled. The launcher's small accessibility service opens the
+  apps set in `remote_buttons` instead. Turn it on in Settings → Accessibility → TV Home remote buttons.
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.
 
 Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
@@ -106,6 +113,11 @@ Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
   launcher uses small named classes instead, so JDK 17 and 21 both work.
 - **aapt2 on Windows** stored assets as `assets/wallpapers\01.jpg`, which Android can't find. Assets
   are added with `jar` instead; only files listed in `launcher/wallpapers.txt` are packaged.
+- **The remote's YouTube button went dead**: Google TV's global-key table sends it (`KEYCODE_BUTTON_3`)
+  only to the stock launcher. Netflix (`BUTTON_4`) goes to the Chromecast service. See *Remote app buttons*.
+- **Button Mapper ignores keys injected over ADB**, and its free version allows one custom button.
+- **Shell can't start a screensaver** (`cmd dreams` needs root). To test, set `screen_off_timeout` to
+  15000 for a moment, then put it back.
 - **Unsplash blocks scripted downloads** with a bot check. The wallpapers come from Wikimedia
   Commons Featured Pictures instead.
 
