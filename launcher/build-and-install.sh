@@ -23,8 +23,17 @@ rm -rf "$B" && mkdir -p "$B/gen" "$B/classes" "$B/dex" "$B/assets/wallpapers"
 # Only the wallpapers named in wallpapers.txt go into the APK.
 grep -vE '^\s*(#|$)' wallpapers.txt | while read -r w; do cp "assets/wallpapers/$w" "$B/assets/wallpapers/"; done
 "$(tool aapt2)" compile --dir res -o "$B/res.zip"
+# The Home Assistant token stays out of git: ha-token.txt (git-ignored) overlays config.xml's empty ha_token.
+OVERLAY=()
+if [ -s ha-token.txt ]; then
+  mkdir -p "$B/local/values"
+  printf '<resources><string name="ha_token" translatable="false">%s</string></resources>\n' \
+    "$(tr -d ' \r\n' < ha-token.txt)" > "$B/local/values/ha_token.xml"
+  "$(tool aapt2)" compile --dir "$B/local" -o "$B/local.zip"
+  OVERLAY=(-R "$B/local.zip")
+fi
 "$(tool aapt2)" link -o "$B/base.apk" -I "$JAR" --manifest AndroidManifest.xml --java "$B/gen" \
-  --min-sdk-version 30 --target-sdk-version 30 "$B/res.zip"
+  --min-sdk-version 30 --target-sdk-version 30 "$B/res.zip" ${OVERLAY[@]+"${OVERLAY[@]}"}
 javac -nowarn -Xlint:-options --release 11 -classpath "$JAR" -d "$B/classes" \
   $(find src "$B/gen" -name '*.java')
 "$(tool d8)" --min-api 30 --lib "$JAR" --output "$B/dex" $(find "$B/classes" -name '*.class')
