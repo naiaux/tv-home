@@ -53,8 +53,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Apple TV style home screen: clock top-left, pills top-right, the focused dock app's name over an
- * ambient glow, a dock of pinned apps, and every other app in a grid that scrolls up on Down.
+ * Apple TV style home screen: clock top-left, pills top-right, an ambient glow in the
+ * focused dock app's colour, a dock of pinned apps, and every other app in a grid that scrolls up on Down.
  * Plain framework views only (no AndroidX). The only network use is the weather forecast (see Ambient).
  */
 public class MainActivity extends Activity {
@@ -85,8 +85,9 @@ public class MainActivity extends Activity {
     private View glow;
     private Ambient.WallpaperView wall;
     private View gridShade;
-    private TextView greeting, clock, ampm, date, weather, rooms, title, wifiPill, inputsPill, appsLabel;
+    private TextView greeting, clock, ampm, date, weather, rooms, wifiPill, inputsPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
+    private float glowX = 0.5f;
     private ValueAnimator glowAnim;
     private int lastFocusedId = View.NO_ID;
     private boolean firstShow = true;
@@ -207,7 +208,7 @@ public class MainActivity extends Activity {
         content.setClipToPadding(false);
         scroll.addView(content, new FrameLayout.LayoutParams(-1, -2));
 
-        // Hero: exactly one screen tall, header on top, title + dock at the bottom.
+        // Hero: exactly one screen tall, header on top, dock at the bottom.
         hero = new FrameLayout(this);
         hero.setClipChildren(false);
         int screenH = getResources().getDisplayMetrics().heightPixels;
@@ -220,12 +221,6 @@ public class MainActivity extends Activity {
         bottom.setClipChildren(false);
         bottom.setClipToPadding(false);
         hero.addView(bottom, lp(-1, -2, Gravity.BOTTOM, dp(48), 0, dp(48), dp(30)));
-
-        title = text(34, "sans-serif-light", Color.WHITE);
-        title.setShadowLayer(dp(18), 0, 0, 0x66000000);
-        title.setSingleLine(true);
-        bottom.addView(title, new LinearLayout.LayoutParams(-2, -2));
-        ((LinearLayout.LayoutParams) title.getLayoutParams()).setMargins(dp(8), 0, 0, dp(14));
 
         dockRow = new LinearLayout(this);
         dockRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -400,7 +395,7 @@ public class MainActivity extends Activity {
         appsLabel.setVisibility(rest.isEmpty() ? View.GONE : View.VISIBLE);
         wireFocus();
 
-        if (!dock.isEmpty()) { title.setText(dock.get(0).label); setGlow(dock.get(0).color); }
+        if (!dock.isEmpty()) setGlow(dock.get(0).color);
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
         if (last != null) last.requestFocus();
         else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
@@ -469,14 +464,13 @@ public class MainActivity extends Activity {
             if (!has) return;
             lastFocusedId = v.getId();
             if (inDock) {
-                title.setText(app.label);
-                title.animate().alpha(1f).setDuration(200).start();
-                animateGlow(app.color);
+                // Before the first layout the card has no position yet, so wait for it.
+                if (v.getWidth() == 0) v.post(() -> animateGlow(app.color, centreX(v)));
+                else animateGlow(app.color, centreX(v));
                 fadeGlow(1f);
                 scroll.smoothScrollTo(0, 0);
             } else {
                 fadeGlow(0.35f);
-                title.animate().alpha(0f).setDuration(200).start();
                 scrollToRow(box);
             }
         });
@@ -651,21 +645,41 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- glow
 
     private void setGlow(int color) {
+        setGlow(color, glowX);
+    }
+
+    /** x is the glow's centre as a fraction of the screen width, so it can sit over the focused app. */
+    private void setGlow(int color, float x) {
         glowColor = color;
+        glowX = x;
         GradientDrawable g = new GradientDrawable();
         g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        g.setGradientCenter(0.5f, 0.78f);
+        g.setGradientCenter(x, 0.78f);
         g.setGradientRadius(getResources().getDisplayMetrics().widthPixels * 0.62f);
         g.setColors(new int[]{withAlpha(color, 0.5f), withAlpha(color, 0.14f), Color.TRANSPARENT});
         glow.setBackground(g);
     }
 
-    private void animateGlow(int to) {
+    private void animateGlow(int to, float toX) {
         if (glowAnim != null) glowAnim.cancel();
-        glowAnim = ValueAnimator.ofObject(new ArgbEvaluator(), glowColor, to);
+        int fromColor = glowColor;
+        float fromX = glowX;
+        ArgbEvaluator argb = new ArgbEvaluator();
+        glowAnim = ValueAnimator.ofFloat(0f, 1f);
         glowAnim.setDuration(450);
-        glowAnim.addUpdateListener(a -> setGlow((int) a.getAnimatedValue()));
+        glowAnim.setInterpolator(new DecelerateInterpolator());
+        glowAnim.addUpdateListener(a -> {
+            float t = a.getAnimatedFraction();
+            setGlow((int) argb.evaluate(t, fromColor, to), fromX + (toX - fromX) * t);
+        });
         glowAnim.start();
+    }
+
+    /** The view's horizontal centre as a fraction of the screen width. */
+    private float centreX(View v) {
+        int[] at = new int[2];
+        v.getLocationOnScreen(at);
+        return (at[0] + v.getWidth() / 2f) / getResources().getDisplayMetrics().widthPixels;
     }
 
     private void fadeGlow(float alpha) {
@@ -712,8 +726,6 @@ public class MainActivity extends Activity {
         header.setAlpha(0f);
         header.setTranslationY(-dp(12));
         header.animate().alpha(1f).translationY(0).setDuration(500).setStartDelay(80).start();
-        title.setAlpha(0f);
-        title.animate().alpha(1f).setDuration(500).setStartDelay(200).start();
         for (int i = 0; i < dockRow.getChildCount(); i++) {
             View t = dockRow.getChildAt(i);
             t.setAlpha(0f);

@@ -66,4 +66,22 @@ else
   printf '%s\n' "pm install -r /data/local/tmp/tvhome.apk" "rm -f /data/local/tmp/tvhome.apk" "${STEPS[@]}" \
     | "$PY" -I ../tools/tv.py --batch
 fi
-echo "Installed. Press Home on the remote."
+tvsh() { if [ -n "${ADB:-}" ]; then $ADB shell "$1"; else "$PY" -I ../tools/tv.py "$1"; fi; }
+
+# Turn on the remote-button accessibility service (Settings > Accessibility > TV Home remote buttons), so the
+# YouTube/Netflix buttons work without a trip to Settings. Any other enabled services (e.g. Button Mapper) are kept.
+SVC=com.mihir.tvhome/com.mihir.tvhome.RemoteKeys
+CUR=$(tvsh "settings get secure enabled_accessibility_services" | tr -d '\r')
+if ! tr ':' '\n' <<< "$CUR" | grep -qx "$SVC"; then
+  [ "$CUR" = null ] || [ -z "$CUR" ] && NEW=$SVC || NEW="$CUR:$SVC"
+  tvsh "settings put secure enabled_accessibility_services '$NEW'"
+fi
+tvsh "settings put secure accessibility_enabled 1"
+sleep 3
+# Bound services spans several lines, one per service.
+if tvsh "dumpsys accessibility" | sed -n '/Bound services:/,/Enabled services:/p' | grep -q "label=TV Home remote buttons"; then
+  echo "Remote YouTube/Netflix buttons on."
+else
+  echo "!! Remote YouTube/Netflix buttons didn't start. On the TV: Settings > System > Accessibility >"
+  echo "!! TV Home remote buttons, switch it off and on again (or restart the TV)."
+fi
