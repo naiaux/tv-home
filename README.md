@@ -92,7 +92,8 @@ in Developer options or the install fails with `INSTALL_FAILED_VERIFICATION_FAIL
   change together), with a large clock, the date and the weather.
 - **Remote app buttons** (optional): Google TV sends the remote's YouTube/Netflix buttons to its own
   launcher, so they go dead once it's disabled. The launcher's small accessibility service opens the
-  apps set in `remote_buttons` instead. Turn it on in Settings → Accessibility → TV Home remote buttons.
+  apps set in `remote_buttons` instead. The install script turns it on (Settings → Accessibility → TV
+  Home remote buttons) and checks it's running.
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.
 
 Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
