@@ -87,6 +87,7 @@ public class MainActivity extends Activity {
     private View gridShade;
     private TextView greeting, clock, ampm, date, weather, rooms, wifiPill, inputsPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
+    private float glowX = 0.5f;
     private ValueAnimator glowAnim;
     private int lastFocusedId = View.NO_ID;
     private boolean firstShow = true;
@@ -463,7 +464,9 @@ public class MainActivity extends Activity {
             if (!has) return;
             lastFocusedId = v.getId();
             if (inDock) {
-                animateGlow(app.color);
+                // Before the first layout the card has no position yet, so wait for it.
+                if (v.getWidth() == 0) v.post(() -> animateGlow(app.color, centreX(v)));
+                else animateGlow(app.color, centreX(v));
                 fadeGlow(1f);
                 scroll.smoothScrollTo(0, 0);
             } else {
@@ -642,21 +645,41 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- glow
 
     private void setGlow(int color) {
+        setGlow(color, glowX);
+    }
+
+    /** x is the glow's centre as a fraction of the screen width, so it can sit over the focused app. */
+    private void setGlow(int color, float x) {
         glowColor = color;
+        glowX = x;
         GradientDrawable g = new GradientDrawable();
         g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        g.setGradientCenter(0.5f, 0.78f);
+        g.setGradientCenter(x, 0.78f);
         g.setGradientRadius(getResources().getDisplayMetrics().widthPixels * 0.62f);
         g.setColors(new int[]{withAlpha(color, 0.5f), withAlpha(color, 0.14f), Color.TRANSPARENT});
         glow.setBackground(g);
     }
 
-    private void animateGlow(int to) {
+    private void animateGlow(int to, float toX) {
         if (glowAnim != null) glowAnim.cancel();
-        glowAnim = ValueAnimator.ofObject(new ArgbEvaluator(), glowColor, to);
+        int fromColor = glowColor;
+        float fromX = glowX;
+        ArgbEvaluator argb = new ArgbEvaluator();
+        glowAnim = ValueAnimator.ofFloat(0f, 1f);
         glowAnim.setDuration(450);
-        glowAnim.addUpdateListener(a -> setGlow((int) a.getAnimatedValue()));
+        glowAnim.setInterpolator(new DecelerateInterpolator());
+        glowAnim.addUpdateListener(a -> {
+            float t = a.getAnimatedFraction();
+            setGlow((int) argb.evaluate(t, fromColor, to), fromX + (toX - fromX) * t);
+        });
         glowAnim.start();
+    }
+
+    /** The view's horizontal centre as a fraction of the screen width. */
+    private float centreX(View v) {
+        int[] at = new int[2];
+        v.getLocationOnScreen(at);
+        return (at[0] + v.getWidth() / 2f) / getResources().getDisplayMetrics().widthPixels;
     }
 
     private void fadeGlow(float alpha) {
